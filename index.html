@@ -712,6 +712,7 @@ Papa.parse(csvUrl, {
 
     fetch('https://hooks.zapier.com/hooks/catch/21668217/up054pl/', {
       method: 'POST',
+      mode: 'no-cors',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     })
