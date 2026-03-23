@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Valuator – Kostenlose Immobilienbewertung Schweiz</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 40px; background: #f8f9fa; text-align: center; }
+    h1 { color: #2c3e50; }
+    .container { max-width: 800px; margin: 0 auto; background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Kostenlose Immobilienbewertung</h1>
+    <p>Das Tool lädt gerade die Preisdaten von GitHub...</p>
+    <p id="status">Lade Daten...</p>
+
+    <!-- Später kommt hier dein ganzes Formular + JS rein -->
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script>
+      const csvUrl = "https://raw.githubusercontent.com/Valuator1/ch-immobilien-bewertung/main/Alle_PLZ_final.csv";
+
+      Papa.parse(csvUrl, {
+        download: true,
+        header: true,
+        complete: function(results) {
+          console.log("CSV erfolgreich geladen!", results.data.length, "Zeilen");
+          document.getElementById("status").innerHTML = 
+            `✅ ${results.data.length} PLZ-Datensätze geladen.<br>Tool ist bereit.`;
+        },
+        error: function(err) {
+          document.getElementById("status").innerHTML = "Fehler beim Laden der CSV: " + err;
+        }
+      });
+    </script>
+  </div>
+</body>
+</html>
