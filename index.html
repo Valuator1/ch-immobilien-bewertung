@@ -643,65 +643,50 @@ Papa.parse(csvUrl, {
 
     const isHaus = selectedType === 'Haus';
 
-    // ── m²-Preise aus CSV (Durchschnitt über alle Einträge der PLZ)
-    const csvMin = matches.reduce((s, r) => s + (parseFloat(isHaus ? r.Haus_Min        : r.Wohnung_Min)        || 0), 0) / matches.length;
+    // ── Schritt 1: Durchschnittlicher m²-Preis aus CSV
     const csvAvg = matches.reduce((s, r) => s + (parseFloat(isHaus ? r.Haus_Durchschnitt : r.Wohnung_Durchschnitt) || 0), 0) / matches.length;
-    const csvMax = matches.reduce((s, r) => s + (parseFloat(isHaus ? r.Haus_Max        : r.Wohnung_Max)        || 0), 0) / matches.length;
 
-    // ── Basiswerte: Min/Avg/Max als Mittelwerte zwischen den CSV-Ankerpunkten
-    // wertMin  = Mittelwert(csvMin, csvAvg)  → konservative Untergrenze
-    // wertAvg  = csvAvg                      → Marktdurchschnitt
-    // wertMax  = Mittelwert(csvAvg, csvMax)  → optimistische Obergrenze
-    const m2Min = (csvMin + csvAvg) / 2;
-    const m2Avg = csvAvg;
-    // csvMax kann extreme Ausreisser enthalten – Max-m²-Preis auf 1.6× Avg begrenzen
-    const csvMaxClamped = Math.min(csvMax, csvAvg * 1.35);
-    const m2Max = (csvAvg + csvMaxClamped) / 2;
-
-    let basisMin = wohnflaeche * m2Min;
-    let basisAvg = wohnflaeche * m2Avg;
-    let basisMax = wohnflaeche * m2Max;
-
-    // ── Baujahr-Aufschlag (in % auf alle drei Werte)
-    // Neubau 2020+ = +0%, ältere Objekte = Abschlag, sehr alte = stärkerer Abschlag
+    // ── Schritt 2: Zimmerfaktor
+    // CSV-Avg = Schnitt aller Objekte (inkl. Studios/Altbauten).
+    // Mehr Zimmer = grössere Wohnungen = höherer m²-Preis im Schweizer Markt.
     const zimmer = parseFloat(document.getElementById('s5_zimmer').value) || 3;
-    let jahrPct;
-    if      (baujahr >= 2020) jahrPct =  0.00;
-    else if (baujahr >= 2010) jahrPct = -0.03;
-    else if (baujahr >= 2000) jahrPct = -0.06;
-    else if (baujahr >= 1990) jahrPct = -0.10;
-    else if (baujahr >= 1980) jahrPct = -0.15;
-    else if (baujahr >= 1970) jahrPct = -0.20;
-    else if (baujahr >= 1960) jahrPct = -0.25;
-    else                      jahrPct = -0.30;
+    let zimmerFaktor;
+    if      (zimmer <= 1.5) zimmerFaktor = 0.88;
+    else if (zimmer <= 2)   zimmerFaktor = 0.92;
+    else if (zimmer <= 2.5) zimmerFaktor = 0.96;
+    else if (zimmer <= 3)   zimmerFaktor = 1.00;
+    else if (zimmer <= 3.5) zimmerFaktor = 1.08;
+    else if (zimmer <= 4)   zimmerFaktor = 1.13;
+    else if (zimmer <= 4.5) zimmerFaktor = 1.17;
+    else if (zimmer <= 5)   zimmerFaktor = 1.20;
+    else                    zimmerFaktor = 1.23;
 
-    // ── Zimmer-Aufschlag (in %)
-    let zimmerPct;
-    if      (zimmer <= 1.5) zimmerPct = -0.08;
-    else if (zimmer <= 2)   zimmerPct = -0.04;
-    else if (zimmer <= 2.5) zimmerPct = -0.02;
-    else if (zimmer <= 3)   zimmerPct =  0.00;
-    else if (zimmer <= 3.5) zimmerPct =  0.02;
-    else if (zimmer <= 4)   zimmerPct =  0.04;
-    else if (zimmer <= 4.5) zimmerPct =  0.06;
-    else if (zimmer <= 5)   zimmerPct =  0.07;
-    else                    zimmerPct =  0.08;
+    // ── Schritt 3: Baujahr-Faktor
+    // Neubau = +10% Aufschlag; linearer Abschlag 0.4%/Jahr; Minimum 0.60.
+    const currentYear = new Date().getFullYear();
+    const age = Math.max(0, currentYear - baujahr);
+    const baujahrFaktor = Math.max(0.60, 1.10 - (age * 0.004));
 
-    // ── Zusatzflächen-Aufschlag (absolut, 30% / 25% des Avg-m²-Preises)
-    const terrasseWert   = terrasse  * m2Avg * 0.30;
-    const balkonWert     = balkon    * m2Avg * 0.25;
-    let grundstueckWert  = 0;
+    // ── Schritt 4: Bereinigter m²-Preis
+    const adjustedPrice = csvAvg * zimmerFaktor * baujahrFaktor;
+
+    // ── Schritt 5: Basiswert Wohnfläche
+    let estimated = wohnflaeche * adjustedPrice;
+
+    // ── Schritt 6: Zusatzflächen
+    estimated += terrasse  * adjustedPrice * 0.30;  // Terrasse: 30% des m²-Preises
+    estimated += balkon    * adjustedPrice * 0.25;  // Balkon:   25% des m²-Preises
     if (isHaus && grundstueck > 0) {
       const landPreisProM2 = Math.max(200, Math.min(1500, csvAvg * 0.10));
-      grundstueckWert = grundstueck * landPreisProM2;
+      estimated += grundstueck * landPreisProM2;
     }
-    const zusatzWert = terrasseWert + balkonWert + grundstueckWert;
 
-    // ── Alles zusammenrechnen
-    const aufschlag = 1 + jahrPct + zimmerPct;
-    const wertMin = Math.round(basisMin * aufschlag + zusatzWert);
-    const wertAvg = Math.round(basisAvg * aufschlag + zusatzWert);
-    const wertMax = Math.round(basisMax * aufschlag + zusatzWert);
+    // ── Schritt 7: Min / Avg / Max (gerundet auf 1000er)
+    // estimated = konservative Untergrenze; Avg = +3%; Max = +12%
+    const wertMin = Math.round(estimated        / 1000) * 1000;
+    const wertAvg = Math.round(estimated * 1.03 / 1000) * 1000;
+    const wertMax = Math.round(estimated * 1.12 / 1000) * 1000;
+
 
     // =============================================
     // Zapier senden
