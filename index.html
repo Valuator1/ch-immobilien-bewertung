@@ -634,7 +634,7 @@ Papa.parse(csvUrl, {
     const grundstueck = document.getElementById('cb_grundstueck').checked ? parseFloat(document.getElementById('s7_grundstueck').value) || 0 : 0;
     const baujahr = parseInt(document.getElementById('baujahrSelect').value) || 2000;
 
-    // PLZ suchen
+    // ── PLZ suchen
     const matches = priceData.filter(r => r.PLZ === plz);
     if (!matches.length) {
       alert('Postleitzahl nicht gefunden. Bitte überprüfen.');
@@ -643,50 +643,58 @@ Papa.parse(csvUrl, {
 
     const isHaus = selectedType === 'Haus';
 
-    // ── Schritt 1: Durchschnittlicher m²-Preis aus CSV
-    const csvAvg = matches.reduce((s, r) => s + (parseFloat(isHaus ? r.Haus_Durchschnitt : r.Wohnung_Durchschnitt) || 0), 0) / matches.length;
+    // ── Schritt 1: m²-Preise aus CSV
+    const wAvg = matches.reduce((s,r) => s + (parseFloat(r.Wohnung_Durchschnitt) || 0), 0) / matches.length;
+    const hAvg = matches.reduce((s,r) => s + (parseFloat(r.Haus_Durchschnitt)    || 0), 0) / matches.length;
 
-    // ── Schritt 2: Zimmerfaktor
-    // CSV-Avg = Schnitt aller Objekte (inkl. Studios/Altbauten).
-    // Mehr Zimmer = grössere Wohnungen = höherer m²-Preis im Schweizer Markt.
+    // ── Schritt 2: Zimmerfaktor (kalibriert auf Schweizer Marktdaten)
     const zimmer = parseFloat(document.getElementById('s5_zimmer').value) || 3;
-    let zimmerFaktor;
-    if      (zimmer <= 1.5) zimmerFaktor = 0.88;
-    else if (zimmer <= 2)   zimmerFaktor = 0.92;
-    else if (zimmer <= 2.5) zimmerFaktor = 0.96;
-    else if (zimmer <= 3)   zimmerFaktor = 1.00;
-    else if (zimmer <= 3.5) zimmerFaktor = 1.08;
-    else if (zimmer <= 4)   zimmerFaktor = 1.13;
-    else if (zimmer <= 4.5) zimmerFaktor = 1.17;
-    else if (zimmer <= 5)   zimmerFaktor = 1.20;
-    else                    zimmerFaktor = 1.23;
+    const zimmerMap = {1:0.85, 1.5:0.88, 2:0.92, 2.5:0.96, 3:1.00,
+                       3.5:1.08, 4:1.13, 4.5:1.17, 5:1.20, 5.5:1.23, 6:1.26};
+    const zimmerFaktor = zimmerMap[zimmer] || 1.28;
 
     // ── Schritt 3: Baujahr-Faktor
-    // Neubau = +10% Aufschlag; linearer Abschlag 0.4%/Jahr; Minimum 0.60.
     const currentYear = new Date().getFullYear();
     const age = Math.max(0, currentYear - baujahr);
-    const baujahrFaktor = Math.max(0.60, 1.10 - (age * 0.004));
+    let baujahrFaktor;
+    if (isHaus) {
+      // Haus: Neubau-Bonus +10%, linearer Abschlag 0.4%/Jahr, Minimum 0.60
+      baujahrFaktor = Math.max(0.60, 1.10 - age * 0.004);
+    } else {
+      // Wohnung: kein Neubau-Aufschlag (Renovation nivelliert), Abschlag 0.4%/Jahr, Min 0.65
+      baujahrFaktor = Math.max(0.65, 1.00 - age * 0.004);
+    }
 
     // ── Schritt 4: Bereinigter m²-Preis
-    const adjustedPrice = csvAvg * zimmerFaktor * baujahrFaktor;
+    let adjustedPrice;
+    if (isHaus) {
+      adjustedPrice = hAvg * baujahrFaktor;
+    } else {
+      adjustedPrice = wAvg * zimmerFaktor * baujahrFaktor;
+    }
 
-    // ── Schritt 5: Basiswert Wohnfläche
+    // ── Schritt 5: Basiswert Wohnfläche + Nebennutzflächen
     let estimated = wohnflaeche * adjustedPrice;
+    estimated += terrasse * adjustedPrice * 0.30;  // Terrasse: 30% des m²-Preises
+    estimated += balkon   * adjustedPrice * 0.25;  // Balkon:   25% des m²-Preises
 
-    // ── Schritt 6: Zusatzflächen
-    estimated += terrasse  * adjustedPrice * 0.30;  // Terrasse: 30% des m²-Preises
-    estimated += balkon    * adjustedPrice * 0.25;  // Balkon:   25% des m²-Preises
+    // ── Schritt 6: Grundstück (nur Häuser)
+    // Baulandpreis skaliert mit dem Wohnungs-m²-Preis der Lage
     if (isHaus && grundstueck > 0) {
-      const landPreisProM2 = Math.max(200, Math.min(1500, csvAvg * 0.10));
-      estimated += grundstueck * landPreisProM2;
+      let landFaktor;
+      if      (wAvg < 5000)  landFaktor = 0.04;
+      else if (wAvg < 7000)  landFaktor = 0.06;
+      else if (wAvg < 10000) landFaktor = 0.10;
+      else if (wAvg < 14000) landFaktor = 0.18;
+      else                   landFaktor = 0.27;
+      estimated += grundstueck * wAvg * landFaktor;
     }
 
     // ── Schritt 7: Min / Avg / Max (gerundet auf 1000er)
-    // estimated = konservative Untergrenze; Avg = +3%; Max = +12%
+    // Kalibrierte Bandbreite: Min = Basis, Avg = +3%, Max = +12%
     const wertMin = Math.round(estimated        / 1000) * 1000;
     const wertAvg = Math.round(estimated * 1.03 / 1000) * 1000;
     const wertMax = Math.round(estimated * 1.12 / 1000) * 1000;
-
 
     // =============================================
     // Zapier senden
