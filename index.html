@@ -634,55 +634,66 @@ Papa.parse(csvUrl, {
     const grundstueck = document.getElementById('cb_grundstueck').checked ? parseFloat(document.getElementById('s7_grundstueck').value) || 0 : 0;
     const baujahr = parseInt(document.getElementById('baujahrSelect').value) || 2000;
 
-    // PLZ suchen
+    // PLZ suchen (nur Durchschnittspreis – Min/Max der CSV sind Marktextreme, ungeeignet als Range)
     const matches = priceData.filter(r => r.PLZ === plz);
     if (!matches.length) {
       alert('Postleitzahl nicht gefunden. Bitte überprüfen.');
       return;
     }
 
-    let avgW = matches.reduce((sum, r) => sum + parseFloat(r.Wohnung_Durchschnitt || 0), 0) / matches.length;
-    let minW = matches.reduce((sum, r) => sum + parseFloat(r.Wohnung_Min || 0), 0) / matches.length;
-    let maxW = matches.reduce((sum, r) => sum + parseFloat(r.Wohnung_Max || 0), 0) / matches.length;
-
-    let avgH = matches.reduce((sum, r) => sum + parseFloat(r.Haus_Durchschnitt || 0), 0) / matches.length;
-    let minH = matches.reduce((sum, r) => sum + parseFloat(r.Haus_Min || 0), 0) / matches.length;
-    let maxH = matches.reduce((sum, r) => sum + parseFloat(r.Haus_Max || 0), 0) / matches.length;
-
-    // ← FIX: selectedType-Variable verwenden statt fragilen DOM-Selektor
     const isHaus = selectedType === 'Haus';
-    const avgPrice = isHaus ? avgH : avgW;
-    const minPrice = isHaus ? minH : minW;
-    const maxPrice = isHaus ? maxH : maxW;
 
-    // Basiswert
-    let basis = wohnflaeche * avgPrice;
-    let basisMin = wohnflaeche * minPrice;
-    let basisMax = wohnflaeche * maxPrice;
+    // Durchschnittlicher m²-Preis aus CSV für diese PLZ
+    let avgPrice = matches.reduce((sum, r) => {
+      const val = parseFloat(isHaus ? r.Haus_Durchschnitt : r.Wohnung_Durchschnitt) || 0;
+      return sum + val;
+    }, 0) / matches.length;
 
-    // Zusatzflächen
-    basis    += balkon * avgPrice * 0.40 + terrasse * avgPrice * 0.55;
-    basisMin += balkon * minPrice * 0.35 + terrasse * minPrice * 0.50;
-    basisMax += balkon * maxPrice * 0.45 + terrasse * maxPrice * 0.60;
+    // ── 1. Zimmerfaktor
+    // Mehr Zimmer = leicht höherer m²-Preis (Schweizer Marktlogik)
+    const zimmer = parseFloat(document.getElementById('s5_zimmer').value) || 3;
+    let zimmerFaktor;
+    if      (zimmer <= 1.5) zimmerFaktor = 0.92;
+    else if (zimmer <= 2)   zimmerFaktor = 0.96;
+    else if (zimmer <= 2.5) zimmerFaktor = 0.98;
+    else if (zimmer <= 3)   zimmerFaktor = 1.00;
+    else if (zimmer <= 3.5) zimmerFaktor = 1.02;
+    else if (zimmer <= 4)   zimmerFaktor = 1.04;
+    else if (zimmer <= 4.5) zimmerFaktor = 1.06;
+    else if (zimmer <= 5)   zimmerFaktor = 1.07;
+    else                    zimmerFaktor = 1.08;
 
+    const preis = avgPrice * zimmerFaktor;
+
+    // ── 2. Baujahr-Faktor (Neubau ab 2020 = Referenz 1.0)
+    let jahrFaktor;
+    if      (baujahr >= 2020) jahrFaktor = 1.00;
+    else if (baujahr >= 2010) jahrFaktor = 0.97;
+    else if (baujahr >= 2000) jahrFaktor = 0.94;
+    else if (baujahr >= 1990) jahrFaktor = 0.90;
+    else if (baujahr >= 1980) jahrFaktor = 0.85;
+    else if (baujahr >= 1970) jahrFaktor = 0.80;
+    else if (baujahr >= 1960) jahrFaktor = 0.75;
+    else                      jahrFaktor = 0.70;
+
+    // ── 3. Basiswert Wohnfläche
+    let basis = wohnflaeche * preis * jahrFaktor;
+
+    // ── 4. Zusatzflächen (Nebennutzflächen: 25–30% des m²-Preises)
+    basis += terrasse * preis * jahrFaktor * 0.30;
+    basis += balkon   * preis * jahrFaktor * 0.25;
+
+    // ── 5. Grundstück bei Häusern (ca. 10% des m²-Preises als Landwert-Proxy)
     if (isHaus && grundstueck > 0) {
-      const landFaktor = avgPrice / 8000;
-      const landPreis = 1200 * landFaktor;
-      basis    += grundstueck * landPreis;
-      basisMin += grundstueck * landPreis * 0.85;
-      basisMax += grundstueck * landPreis * 1.15;
+      const landPreisProM2 = Math.max(200, Math.min(1500, avgPrice * 0.10));
+      basis += grundstueck * landPreisProM2;
     }
 
-    // Baujahr-Faktor
-    let jahrFaktor = 1;
-    if (baujahr < 1970) jahrFaktor = 0.82;
-    else if (baujahr < 1990) jahrFaktor = 0.93;
-    else if (baujahr < 2010) jahrFaktor = 0.98;
-    else if (baujahr >= 2010) jahrFaktor = 1.08;
-
-    const wertMin = Math.round(basisMin * jahrFaktor);
-    const wertAvg = Math.round(basis * jahrFaktor);
-    const wertMax = Math.round(basisMax * jahrFaktor);
+    // ── 6. Realistische Bandbreite: ±12% um den Durchschnitt
+    const BAND = 0.12;
+    const wertMin = Math.round(basis * (1 - BAND));
+    const wertAvg = Math.round(basis);
+    const wertMax = Math.round(basis * (1 + BAND));
 
     // =============================================
     // Zapier senden
