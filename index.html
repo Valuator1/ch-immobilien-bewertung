@@ -271,11 +271,11 @@
     <div class="vw-type-row">
       <div class="vw-type-card">
         <img src="https://qm2.f17.myftpupload.com/wp-content/uploads/2026/03/2.png" alt="Wohnung">
-        <button class="vw-type-btn" onclick="vw_go('s2')">Wohnung</button>
+        <button class="vw-type-btn" onclick="vw_selectType('Wohnung')">Wohnung</button>
       </div>
       <div class="vw-type-card">
         <img src="https://qm2.f17.myftpupload.com/wp-content/uploads/2026/03/1-1.png" alt="Haus">
-        <button class="vw-type-btn" onclick="vw_go('s2')">Haus</button>
+        <button class="vw-type-btn" onclick="vw_selectType('Haus')">Haus</button>
       </div>
     </div>
   </div>
@@ -493,13 +493,15 @@
 // 1. Globale Daten + CSV-Laden
 // =============================================
 let priceData = [];
+let selectedType = 'Wohnung'; // ← FIX: Immobilientyp wird hier gespeichert
+
 const csvUrl = "https://raw.githubusercontent.com/Valuator1/ch-immobilien-bewertung/main/Alle_PLZ_final.csv";
 
 Papa.parse(csvUrl, {
   download: true,
   header: true,
   complete: (results) => {
-    priceData = results.data.filter(row => row.PLZ && row.PLZ.trim() !== ""); // leere Zeilen filtern
+    priceData = results.data.filter(row => row.PLZ && row.PLZ.trim() !== "");
     document.getElementById('status').innerHTML = `✅ ${priceData.length} PLZ-Datensätze geladen – Tool bereit`;
   },
   error: (err) => {
@@ -508,7 +510,7 @@ Papa.parse(csvUrl, {
 });
 
 // =============================================
-// 2. Deine bestehenden Funktionen (unverändert)
+// 2. Funktionen
 // =============================================
 (function(){
   var sel = document.getElementById('baujahrSelect');
@@ -520,6 +522,12 @@ Papa.parse(csvUrl, {
   }
 
   var cdTimer = null, cdInterval = null;
+
+  // ← FIX: Typ speichern und zur nächsten Slide wechseln
+  window.vw_selectType = function(type) {
+    selectedType = type;
+    vw_go('s2');
+  };
 
   window.vw_go = function(id){
     document.querySelectorAll('.vw-wrap .vw-slide').forEach(function(el){
@@ -598,7 +606,7 @@ Papa.parse(csvUrl, {
   };
 
   // =============================================
-  // 3. Hier passiert die Bewertung + Zapier-Senden
+  // 3. Bewertung + Zapier-Senden
   // =============================================
   window.vw_submitCheck = function(){
     var v = true;
@@ -626,7 +634,7 @@ Papa.parse(csvUrl, {
     const grundstueck = document.getElementById('cb_grundstueck').checked ? parseFloat(document.getElementById('s7_grundstueck').value) || 0 : 0;
     const baujahr = parseInt(document.getElementById('baujahrSelect').value) || 2000;
 
-    // PLZ suchen (Durchschnitt bei mehreren Einträgen)
+    // PLZ suchen
     const matches = priceData.filter(r => r.PLZ === plz);
     if (!matches.length) {
       alert('Postleitzahl nicht gefunden. Bitte überprüfen.');
@@ -641,7 +649,8 @@ Papa.parse(csvUrl, {
     let minH = matches.reduce((sum, r) => sum + parseFloat(r.Haus_Min || 0), 0) / matches.length;
     let maxH = matches.reduce((sum, r) => sum + parseFloat(r.Haus_Max || 0), 0) / matches.length;
 
-    const isHaus = document.querySelector('.vw-type-btn[onclick*="Haus"]').parentElement.querySelector('button').textContent.trim() === 'Haus'; // grobe Erkennung – besser wäre eine Variable
+    // ← FIX: selectedType-Variable verwenden statt fragilen DOM-Selektor
+    const isHaus = selectedType === 'Haus';
     const avgPrice = isHaus ? avgH : avgW;
     const minPrice = isHaus ? minH : minW;
     const maxPrice = isHaus ? maxH : maxW;
@@ -657,8 +666,8 @@ Papa.parse(csvUrl, {
     basisMax += balkon * maxPrice * 0.45 + terrasse * maxPrice * 0.60;
 
     if (isHaus && grundstueck > 0) {
-      const landFaktor = avgPrice / 8000; // grobe Skalierung – anpassen nach Bedarf
-      const landPreis = 1200 * landFaktor; // CHF/m² Bauland – realistisch anpassen
+      const landFaktor = avgPrice / 8000;
+      const landPreis = 1200 * landFaktor;
       basis    += grundstueck * landPreis;
       basisMin += grundstueck * landPreis * 0.85;
       basisMax += grundstueck * landPreis * 1.15;
@@ -708,7 +717,6 @@ Papa.parse(csvUrl, {
     })
     .then(response => {
       console.log('Zapier gesendet:', response);
-      // Erfolg → weiter zum Thank-You
       vw_go('s10');
       vw_startCd();
     })
@@ -737,6 +745,7 @@ Papa.parse(csvUrl, {
   window.vw_reset = function(){
     if(cdTimer) clearTimeout(cdTimer);
     if(cdInterval) clearInterval(cdInterval);
+    selectedType = 'Wohnung'; // ← FIX: Typ beim Reset zurücksetzen
     ['s3_strasse','s3_hausnummer','s3_plz','s3_ort','s6_flaeche',
      's7_terrasse','s7_balkon','s7_grundstueck','vorname','nachname','telefon','email']
       .forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
