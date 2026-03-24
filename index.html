@@ -86,18 +86,18 @@
     </div>
   </div>
 
-  <!-- S2 -->
+  <!-- S2: Grund -->
   <div id="s2" class="vw-slide">
     <h2 class="vw-h2">Wieso brauchen Sie die Schätzung?</h2>
     <div class="vw-choice-list">
-      <button class="vw-choice-btn" onclick="vw_go('s3')">Ich möchte verkaufen</button>
-      <button class="vw-choice-btn" onclick="vw_go('s3')">Ich möchte kaufen</button>
-      <button class="vw-choice-btn" onclick="vw_go('s3')">Ich bin neugierig</button>
+      <button class="vw-choice-btn" onclick="vw_setGrund('Ich möchte verkaufen')">Ich möchte verkaufen</button>
+      <button class="vw-choice-btn" onclick="vw_setGrund('Ich möchte kaufen')">Ich möchte kaufen</button>
+      <button class="vw-choice-btn" onclick="vw_setGrund('Ich bin neugierig')">Ich bin neugierig</button>
     </div>
     <div class="vw-nav"><button class="vw-btn-back" onclick="vw_go('s1')">← Zurück</button></div>
   </div>
 
-  <!-- S3 -->
+  <!-- S3: Adresse -->
   <div id="s3" class="vw-slide">
     <h2 class="vw-h2">Wo befindet sich das Objekt?</h2>
     <div class="vw-form-wrap">
@@ -122,19 +122,19 @@
     </div>
   </div>
 
-  <!-- S4 -->
+  <!-- S4: Verkaufszeitraum -->
   <div id="s4" class="vw-slide">
     <h2 class="vw-h2">Falls Sie verkaufen möchten, wann soll das sein?</h2>
     <div class="vw-choice-list">
-      <button class="vw-choice-btn pill" onclick="vw_go('s5')">So schnell wie möglich</button>
-      <button class="vw-choice-btn pill" onclick="vw_go('s5')">In den nächsten 6 Monaten</button>
-      <button class="vw-choice-btn pill" onclick="vw_go('s5')">In den nächsten 2 Jahren</button>
-      <button class="vw-choice-btn pill" onclick="vw_go('s5')">Ich möchte nicht verkaufen</button>
+      <button class="vw-choice-btn pill" onclick="vw_setZeitraum('So schnell wie möglich')">So schnell wie möglich</button>
+      <button class="vw-choice-btn pill" onclick="vw_setZeitraum('In den nächsten 6 Monaten')">In den nächsten 6 Monaten</button>
+      <button class="vw-choice-btn pill" onclick="vw_setZeitraum('In den nächsten 2 Jahren')">In den nächsten 2 Jahren</button>
+      <button class="vw-choice-btn pill" onclick="vw_setZeitraum('Ich möchte nicht verkaufen')">Ich möchte nicht verkaufen</button>
     </div>
     <div class="vw-nav"><button class="vw-btn-back" onclick="vw_go('s3')">← Zurück</button></div>
   </div>
 
-  <!-- S5 -->
+  <!-- S5: Zimmer -->
   <div id="s5" class="vw-slide">
     <h2 class="vw-h2">Wie viele Zimmer hat das Objekt?</h2>
     <div class="vw-form-wrap" style="max-width:400px;">
@@ -155,7 +155,7 @@
     </div>
   </div>
 
-  <!-- S6 -->
+  <!-- S6: Wohnfläche -->
   <div id="s6" class="vw-slide">
     <h2 class="vw-h2">Wie gross ist die Wohnfläche?</h2>
     <div class="vw-area-wrap">
@@ -170,7 +170,7 @@
     </div>
   </div>
 
-  <!-- S7 -->
+  <!-- S7: Zusatzflächen -->
   <div id="s7" class="vw-slide">
     <h2 class="vw-h2">Welche Flächen möchten Sie angeben?</h2>
     <div class="vw-checkbox-group">
@@ -202,7 +202,7 @@
     </div>
   </div>
 
-  <!-- S8 -->
+  <!-- S8: Baujahr -->
   <div id="s8" class="vw-slide">
     <h2 class="vw-h2">In welchem Jahr wurde es erbaut?</h2>
     <div class="vw-form-wrap" style="max-width:400px;">
@@ -266,7 +266,7 @@
     <div class="vw-nav"><button class="vw-btn-back" onclick="vw_go('s9')">← Zurück</button></div>
   </div>
 
-  <!-- S11: Aussicht -->
+  <!-- S11: Aussicht → löst Partial Submit aus -->
   <div id="s11" class="vw-slide">
     <h2 class="vw-h2">Wie ist die Aussicht und Lage des Objekts?</h2>
     <div class="vw-quality-row">
@@ -310,7 +310,7 @@
     </div>
     <div class="vw-nav">
       <button class="vw-btn-back" onclick="vw_go('s11')">← Zurück</button>
-      <button class="vw-btn-next" onclick="vw_submitCheck()">Jetzt bewerten</button>
+      <button class="vw-btn-next" onclick="vw_submitFull()">Jetzt bewerten</button>
     </div>
   </div>
 
@@ -337,8 +337,16 @@
 <script>
 // ── State ─────────────────────────────────────────────────────
 var priceData=[], selectedType='Wohnung';
+var selectedGrund='', selectedZeitraum='';
 var selectedAusbau='', selectedZustand='', selectedAussicht='';
 var cdTimer=null, cdInterval=null;
+var partialSent=false;
+
+// Session-ID: verbindet Partial + Full Submit in Zapier/Excel
+var sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2,6);
+
+var ZAPIER_URL_FULL    = 'https://hooks.zapier.com/hooks/catch/21668217/up054pl/';
+var ZAPIER_URL_PARTIAL = 'https://hooks.zapier.com/hooks/catch/21668217/upj4t6t/';
 
 Papa.parse('https://raw.githubusercontent.com/Valuator1/ch-immobilien-bewertung/main/Alle_PLZ_final.csv',{
   download:true, header:true,
@@ -347,26 +355,6 @@ Papa.parse('https://raw.githubusercontent.com/Valuator1/ch-immobilien-bewertung/
 });
 
 // ── Berechnung ────────────────────────────────────────────────
-//
-// KALIBRIERT auf reale Schweizer Transaktionen (15/16 Testobjekte in Range):
-//
-// BASISPREIS:
-//   Häuser:   70% Haus_Min + 30% Haus_Avg  → eliminiert Luxus-Bias des Durchschnitts
-//   Wohnungen: 62% Wohn_Min + 38% Wohn_Avg → Wohnungen haben weniger Extremspread
-//
-// BAUJAHR-FAKTOR (nicht-linear):
-//   ≤5 Jahre:  +5% (Neubau-Bonus)
-//   6–10 J.:   neutral (1.00)
-//   11–20 J.:  −0.5%/Jahr
-//   21–40 J.:  −0.6%/Jahr
-//   41–60 J.:  −0.5%/Jahr
-//   61–80 J.:  −0.4%/Jahr
-//   >80 J.:    Boden 0.65 (verhindert extreme Abzüge)
-//
-// CAP: bjFaktor × zustandFaktor ≥ 0.76 (kein doppelter Extremabzug)
-//
-// RANGE: ±18% Häuser / ±20% Wohnungen (Marktschwankung Schweiz)
-//
 function vw_calculate(){
   var plz        =document.getElementById('s3_plz').value.trim();
   var wf         =parseFloat(document.getElementById('s6_flaeche').value)||0;
@@ -386,11 +374,8 @@ function vw_calculate(){
     sumAvg+=parseFloat(isHaus?r.Haus_Durchschnitt:r.Wohnung_Durchschnitt)||0;
   });
   var bMin=sumMin/n, bAvg=sumAvg/n;
-
-  // Anker: Haus 70/30, Wohnung 62/38
   var anchor=isHaus?(bMin*0.70+bAvg*0.30):(bMin*0.62+bAvg*0.38);
 
-  // Baujahr-Faktor
   var age=Math.max(0,new Date().getFullYear()-bj), bjF;
   if     (age<= 5) bjF=1.05;
   else if(age<=10) bjF=1.00;
@@ -400,25 +385,19 @@ function vw_calculate(){
   else if(age<=80) bjF=0.73-(age-60)*0.004;
   else             bjF=Math.max(0.65,0.65-(age-80)*0.001);
 
-  // Qualitätsfaktoren
   var zimMap={1:0.93,1.5:0.94,2:0.96,2.5:0.97,3:0.98,3.5:1.00,4:1.02,4.5:1.04,5:1.06,5.5:1.08,6:1.10,6.5:1.12};
   var zimF =zimMap[zimmer]||1.00;
   var ausF ={standard:0.95,gehoben:1.15,luxus:1.30}[selectedAusbau]||1.00;
   var zuF  ={neuwertig:1.05,gepflegt:1.00,renovierungsbedarf:0.88}[selectedZustand]||1.00;
   var lagF ={keine:0.94,normal:1.00,panorama:1.09}[selectedAussicht]||1.00;
 
-  // Cap: Baujahr × Zustand nie unter 0.76 (verhindert doppelte Extremabzüge)
   var bjZuCapped=Math.max(0.76, bjF*zuF);
   var qualF=bjZuCapped*zimF*ausF*lagF;
 
-  // Mittelwert-Schätzung
   var total=anchor*qualF*wf;
   total+=(terrasse+balkon)*anchor*qualF*0.25;
-  if(isHaus&&grundstueck>0){
-    total+=grundstueck*bMin*0.22*Math.max(0.60,bjF);
-  }
+  if(isHaus&&grundstueck>0){ total+=grundstueck*bMin*0.22*Math.max(0.60,bjF); }
 
-  // Range: ±18% Haus / ±20% Wohnung
   var sp=isHaus?0.18:0.20;
   return{
     wertMin:Math.round(total*(1-sp)/1000)*1000,
@@ -427,37 +406,127 @@ function vw_calculate(){
   };
 }
 
-// ── UI ────────────────────────────────────────────────────────
+// ── Gemeinsame Objekt-Payload ─────────────────────────────────
+function vw_buildObjektPayload(){
+  return {
+    session_id:      sessionId,
+    immobilientyp:   selectedType,
+    bewertungsgrund: selectedGrund,
+    verkaufszeitraum:selectedZeitraum,
+    strasse:         document.getElementById('s3_strasse').value.trim(),
+    hausnummer:      document.getElementById('s3_hausnummer').value.trim(),
+    plz:             document.getElementById('s3_plz').value.trim(),
+    ort:             document.getElementById('s3_ort').value.trim(),
+    zimmer:          document.getElementById('s5_zimmer').value,
+    wohnflaeche:     parseFloat(document.getElementById('s6_flaeche').value)||0,
+    terrasse:        document.getElementById('cb_terrasse').checked    ?(parseFloat(document.getElementById('s7_terrasse').value)||0):0,
+    balkon:          document.getElementById('cb_balkon').checked      ?(parseFloat(document.getElementById('s7_balkon').value)||0):0,
+    grundstueck:     document.getElementById('cb_grundstueck').checked ?(parseFloat(document.getElementById('s7_grundstueck').value)||0):0,
+    baujahr:         parseInt(document.getElementById('baujahrSelect').value)||0,
+    ausbaustandard:  selectedAusbau,
+    zustand:         selectedZustand,
+    aussicht:        selectedAussicht
+  };
+}
+
+// ── Partial Submit (nach S11, ohne Kontaktdaten) ──────────────
+function vw_submitPartial(){
+  var result=vw_calculate();
+  if(!result) return;
+  var payload=vw_buildObjektPayload();
+  payload.submit_typ    = 'partial_ohne_kontakt';
+  payload.wert_min      = result.wertMin;
+  payload.wert_durchschnitt = result.wertAvg;
+  payload.wert_max      = result.wertMax;
+  payload.timestamp     = new Date().toISOString();
+
+  fetch(ZAPIER_URL_PARTIAL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+    .then(function(){ partialSent=true; })
+    .catch(function(e){ console.error('Partial Zapier:',e); });
+}
+
+// ── Full Submit (mit Kontaktdaten) ────────────────────────────
+window.vw_submitFull=function(){
+  var ok=true;
+  var vn =document.getElementById('vorname').value.trim();
+  var nn =document.getElementById('nachname').value.trim();
+  var tel=document.getElementById('telefon').value.trim();
+  var em =document.getElementById('email').value.trim();
+  var re =/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  if(!vn) {se('vorname','err_vorname','Bitte Vornamen eingeben.');ok=false;}      else{ce('vorname','err_vorname');}
+  if(!nn) {se('nachname','err_nachname','Bitte Nachnamen eingeben.');ok=false;}   else{ce('nachname','err_nachname');}
+  if(!tel){se('telefon','err_telefon','Bitte Telefonnummer eingeben.');ok=false;} else{ce('telefon','err_telefon');}
+  if(!em) {se('email','err_email','Bitte E-Mail eingeben.');ok=false;}
+  else if(!re.test(em)){se('email','err_email','Bitte gültige E-Mail eingeben.');ok=false;}
+  else{ce('email','err_email');}
+  if(!ok) return;
+
+  var plz=document.getElementById('s3_plz').value.trim();
+  if(!priceData.filter(function(r){return r.PLZ===plz;}).length){alert('Postleitzahl nicht gefunden.');return;}
+  var result=vw_calculate();
+  if(!result){alert('Postleitzahl nicht gefunden.');return;}
+
+  var payload=vw_buildObjektPayload();
+  payload.submit_typ         = 'full_mit_kontakt';
+  payload.anrede             = document.getElementById('anrede').value;
+  payload.vorname            = vn;
+  payload.nachname           = nn;
+  payload.telefon            = tel;
+  payload.email              = em;
+  payload.wert_min           = result.wertMin;
+  payload.wert_durchschnitt  = result.wertAvg;
+  payload.wert_max           = result.wertMax;
+  payload.timestamp          = new Date().toISOString();
+
+  fetch(ZAPIER_URL_FULL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+    .then(function(){ vw_go('s13'); vw_startCd(); })
+    .catch(function(e){ console.error('Full Zapier:',e); vw_go('s13'); vw_startCd(); });
+};
+
+// ── UI Hilfsfunktionen ────────────────────────────────────────
 (function(){
   var sel=document.getElementById('baujahrSelect');
   for(var y=2026;y>=1900;y--){var o=document.createElement('option');o.value=y;o.textContent=y;sel.appendChild(o);}
 
-  window.vw_selectType=function(t){selectedType=t;vw_go('s2');};
+  window.vw_selectType=function(t){ selectedType=t; vw_go('s2'); };
+  window.vw_setGrund  =function(v){ selectedGrund=v; vw_go('s3'); };
+  window.vw_setZeitraum=function(v){ selectedZeitraum=v; vw_go('s5'); };
 
   window.vw_go=function(id){
     document.querySelectorAll('.vw-wrap .vw-slide').forEach(function(el){el.classList.remove('vw-active');});
-    var t=document.getElementById(id);if(t)t.classList.add('vw-active');
+    var t=document.getElementById(id); if(t)t.classList.add('vw-active');
     window.scrollTo({top:0,behavior:'smooth'});
   };
 
   window.vw_toggle=function(id,show){var el=document.getElementById(id);if(el)el.style.display=show?'block':'none';};
 
   var qIds={
-    ausbau: {ids:['q9_standard','q9_gehoben','q9_luxus'],       map:{standard:'q9_standard',gehoben:'q9_gehoben',luxus:'q9_luxus'}},
+    ausbau: {ids:['q9_standard','q9_gehoben','q9_luxus'],          map:{standard:'q9_standard',gehoben:'q9_gehoben',luxus:'q9_luxus'}},
     zustand:{ids:['q10_neuwertig','q10_gepflegt','q10_renovierung'],map:{neuwertig:'q10_neuwertig',gepflegt:'q10_gepflegt',renovierungsbedarf:'q10_renovierung'}},
-    aussicht:{ids:['q11_keine','q11_normal','q11_panorama'],     map:{keine:'q11_keine',normal:'q11_normal',panorama:'q11_panorama'}}
+    aussicht:{ids:['q11_keine','q11_normal','q11_panorama'],        map:{keine:'q11_keine',normal:'q11_normal',panorama:'q11_panorama'}}
   };
+
   window.vw_selectQuality=function(field,value,next){
     if(field==='ausbau')   selectedAusbau=value;
     if(field==='zustand')  selectedZustand=value;
-    if(field==='aussicht') selectedAussicht=value;
+    if(field==='aussicht'){ selectedAussicht=value; }
     qIds[field].ids.forEach(function(id){var e=document.getElementById(id);if(e)e.classList.remove('selected');});
-    var el=document.getElementById(qIds[field].map[value]);if(el)el.classList.add('selected');
-    setTimeout(function(){vw_go(next);},200);
+    var el=document.getElementById(qIds[field].map[value]); if(el)el.classList.add('selected');
+    // Nach Aussicht (S11) → Partial Submit feuern, dann weiter zu S12
+    if(field==='aussicht'){
+      setTimeout(function(){
+        vw_submitPartial(); // fire & forget
+        vw_go(next);
+      },200);
+    } else {
+      setTimeout(function(){ vw_go(next); },200);
+    }
   };
 
   function se(iid,eid,msg){var i=document.getElementById(iid),e=document.getElementById(eid);if(i)i.classList.add('input-error');if(e)e.textContent=msg;}
   function ce(iid,eid){var i=document.getElementById(iid),e=document.getElementById(eid);if(i)i.classList.remove('input-error');if(e)e.textContent='';}
+  window.se=se; window.ce=ce;
 
   window.vw_validateS3=function(){
     var f=[{id:'s3_strasse',e:'err_s3_strasse',m:'Bitte Strasse eingeben.'},
@@ -478,56 +547,6 @@ function vw_calculate(){
   };
   window.vw_validateS8=function(){var v=document.getElementById('baujahrSelect').value;if(!v){se('baujahrSelect','err_s8_baujahr','Bitte Baujahr auswählen.');return;}ce('baujahrSelect','err_s8_baujahr');vw_go('s9');};
 
-  window.vw_submitCheck=function(){
-    var ok=true;
-    var vn=document.getElementById('vorname').value.trim();
-    var nn=document.getElementById('nachname').value.trim();
-    var tel=document.getElementById('telefon').value.trim();
-    var em=document.getElementById('email').value.trim();
-    var re=/^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if(!vn){se('vorname','err_vorname','Bitte Vornamen eingeben.');ok=false;}else{ce('vorname','err_vorname');}
-    if(!nn){se('nachname','err_nachname','Bitte Nachnamen eingeben.');ok=false;}else{ce('nachname','err_nachname');}
-    if(!tel){se('telefon','err_telefon','Bitte Telefonnummer eingeben.');ok=false;}else{ce('telefon','err_telefon');}
-    if(!em){se('email','err_email','Bitte E-Mail eingeben.');ok=false;}
-    else if(!re.test(em)){se('email','err_email','Bitte gültige E-Mail eingeben.');ok=false;}
-    else{ce('email','err_email');}
-    if(!ok)return;
-
-    var plz=document.getElementById('s3_plz').value.trim();
-    if(!priceData.filter(function(r){return r.PLZ===plz;}).length){alert('Postleitzahl nicht gefunden.');return;}
-    var result=vw_calculate();
-    if(!result){alert('Postleitzahl nicht gefunden.');return;}
-
-    fetch('https://hooks.zapier.com/hooks/catch/21668217/up054pl/',{
-      method:'POST',mode:'no-cors',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        anrede:document.getElementById('anrede').value,
-        vorname:vn,nachname:nn,telefon:tel,email:em,
-        plz:plz,
-        ort:document.getElementById('s3_ort').value.trim(),
-        strasse:document.getElementById('s3_strasse').value.trim(),
-        hausnummer:document.getElementById('s3_hausnummer').value.trim(),
-        immobilientyp:selectedType,
-        zimmer:document.getElementById('s5_zimmer').value,
-        wohnflaeche:parseFloat(document.getElementById('s6_flaeche').value)||0,
-        terrasse:document.getElementById('cb_terrasse').checked?(parseFloat(document.getElementById('s7_terrasse').value)||0):0,
-        balkon:document.getElementById('cb_balkon').checked?(parseFloat(document.getElementById('s7_balkon').value)||0):0,
-        grundstueck:document.getElementById('cb_grundstueck').checked?(parseFloat(document.getElementById('s7_grundstueck').value)||0):0,
-        baujahr:parseInt(document.getElementById('baujahrSelect').value)||0,
-        ausbaustandard:selectedAusbau,
-        zustand:selectedZustand,
-        aussicht:selectedAussicht,
-        wert_min:result.wertMin,
-        wert_durchschnitt:result.wertAvg,
-        wert_max:result.wertMax,
-        timestamp:new Date().toISOString()
-      })
-    })
-    .then(function(){vw_go('s13');vw_startCd();})
-    .catch(function(e){console.error('Zapier:',e);vw_go('s13');vw_startCd();});
-  };
-
   function vw_startCd(){
     if(cdTimer)clearTimeout(cdTimer);if(cdInterval)clearInterval(cdInterval);
     var r=30,bar=document.getElementById('countdownBar'),sp=document.getElementById('countdownSec');
@@ -536,10 +555,15 @@ function vw_calculate(){
     cdInterval=setInterval(function(){r--;sp.textContent=r;bar.style.width=(r/30*100)+'%';if(r<=0)clearInterval(cdInterval);},1000);
     cdTimer=setTimeout(function(){vw_reset();},30000);
   }
+  window.vw_startCd=vw_startCd;
 
   window.vw_reset=function(){
     if(cdTimer)clearTimeout(cdTimer);if(cdInterval)clearInterval(cdInterval);
-    selectedType='Wohnung';selectedAusbau='';selectedZustand='';selectedAussicht='';
+    selectedType='Wohnung';selectedGrund='';selectedZeitraum='';
+    selectedAusbau='';selectedZustand='';selectedAussicht='';
+    partialSent=false;
+    // Neue Session-ID für nächste Bewertung
+    sessionId='sess_'+Date.now()+'_'+Math.random().toString(36).substr(2,6);
     ['s3_strasse','s3_hausnummer','s3_plz','s3_ort','s6_flaeche','s7_terrasse','s7_balkon','s7_grundstueck','vorname','nachname','telefon','email']
       .forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});
     ['s5_zimmer','baujahrSelect','anrede'].forEach(function(id){var e=document.getElementById(id);if(e)e.selectedIndex=0;});
