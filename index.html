@@ -255,10 +255,9 @@
   </style>
 </head>
 <body>
-
 <div class="vw-wrap">
   <div id="status">Lade Preisdaten von GitHub…</div>
-
+  
   <!-- SLIDE 1 -->
   <div id="s1" class="vw-slide vw-active">
     <h1 class="vw-h1" style="font-size:1.3rem !important;">Kostenlose Immobilienbewertung Schweiz</h1>
@@ -493,8 +492,7 @@
 // 1. Globale Daten + CSV-Laden
 // =============================================
 let priceData = [];
-let selectedType = 'Wohnung'; // ← FIX: Immobilientyp wird hier gespeichert
-
+let selectedType = 'Wohnung'; 
 const csvUrl = "https://raw.githubusercontent.com/Valuator1/ch-immobilien-bewertung/main/Alle_PLZ_final.csv";
 
 Papa.parse(csvUrl, {
@@ -513,6 +511,7 @@ Papa.parse(csvUrl, {
 // 2. Funktionen
 // =============================================
 (function(){
+  // Baujahr-Dropdown füllen
   var sel = document.getElementById('baujahrSelect');
   for(var y=2026; y>=1900; y--){
     var o = document.createElement('option');
@@ -523,7 +522,6 @@ Papa.parse(csvUrl, {
 
   var cdTimer = null, cdInterval = null;
 
-  // ← FIX: Typ speichern und zur nächsten Slide wechseln
   window.vw_selectType = function(type) {
     selectedType = type;
     vw_go('s2');
@@ -548,7 +546,6 @@ Papa.parse(csvUrl, {
     if(i) i.classList.add('input-error');
     if(e) e.textContent = msg;
   }
-
   function ok(iid, eid){
     var i = document.getElementById(iid), e = document.getElementById(eid);
     if(i) i.classList.remove('input-error');
@@ -606,7 +603,7 @@ Papa.parse(csvUrl, {
   };
 
   // =============================================
-  // 3. Bewertung + Zapier-Senden
+  // 3. Bewertung + Zapier-Senden (HIER DIE NEUE BERECHNUNG AUS DEM ALTEN TOOL)
   // =============================================
   window.vw_submitCheck = function(){
     var v = true;
@@ -615,6 +612,7 @@ Papa.parse(csvUrl, {
     var tel = document.getElementById('telefon').value.trim();
     var em = document.getElementById('email').value.trim();
     var re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
     if(!vn){ err('vorname','err_vorname','Bitte Vornamen eingeben.'); v = false; } else { ok('vorname','err_vorname'); }
     if(!nn){ err('nachname','err_nachname','Bitte Nachnamen eingeben.'); v = false; } else { ok('nachname','err_nachname'); }
     if(!tel){ err('telefon','err_telefon','Bitte Telefonnummer eingeben.'); v = false; } else { ok('telefon','err_telefon'); }
@@ -624,17 +622,11 @@ Papa.parse(csvUrl, {
 
     if(!v) return;
 
-    // =============================================
-    // Bewertung berechnen
-    // =============================================
+    // === BERECHNUNG NACH DER LOGIK DES ALTEN TOOLS ===
     const plz = document.getElementById('s3_plz').value.trim();
     const wohnflaeche = parseFloat(document.getElementById('s6_flaeche').value) || 0;
-    const terrasse = document.getElementById('cb_terrasse').checked ? parseFloat(document.getElementById('s7_terrasse').value) || 0 : 0;
-    const balkon    = document.getElementById('cb_balkon').checked    ? parseFloat(document.getElementById('s7_balkon').value)    || 0 : 0;
-    const grundstueck = document.getElementById('cb_grundstueck').checked ? parseFloat(document.getElementById('s7_grundstueck').value) || 0 : 0;
     const baujahr = parseInt(document.getElementById('baujahrSelect').value) || 2000;
 
-    // ── PLZ suchen
     const matches = priceData.filter(r => r.PLZ === plz);
     if (!matches.length) {
       alert('Postleitzahl nicht gefunden. Bitte überprüfen.');
@@ -643,62 +635,30 @@ Papa.parse(csvUrl, {
 
     const isHaus = selectedType === 'Haus';
 
-    // ── Schritt 1: m²-Preise aus CSV
-    const wAvg = matches.reduce((s,r) => s + (parseFloat(r.Wohnung_Durchschnitt) || 0), 0) / matches.length;
-    const hAvg = matches.reduce((s,r) => s + (parseFloat(r.Haus_Durchschnitt)    || 0), 0) / matches.length;
+    // m²-Preis aus CSV (wie im alten Tool)
+    let pricePerSqMeter;
+    if (isHaus) {
+      pricePerSqMeter = matches.reduce((s,r) => s + (parseFloat(r.Haus_Durchschnitt) || 0), 0) / matches.length;
+    } else {
+      pricePerSqMeter = matches.reduce((s,r) => s + (parseFloat(r.Wohnung_Durchschnitt) || 0), 0) / matches.length;
+    }
 
-    // ── Schritt 2: Zimmerfaktor (kalibriert auf Schweizer Marktdaten)
-    const zimmer = parseFloat(document.getElementById('s5_zimmer').value) || 3;
-    const zimmerMap = {1:0.85, 1.5:0.88, 2:0.92, 2.5:0.96, 3:1.00,
-                       3.5:1.08, 4:1.13, 4.5:1.17, 5:1.20, 5.5:1.23, 6:1.26};
-    const zimmerFaktor = zimmerMap[zimmer] || 1.28;
-
-    // ── Schritt 3: Baujahr-Faktor
+    // Baujahr-Abschlag genau wie im alten Tool (0,4 % pro Jahr)
     const currentYear = new Date().getFullYear();
     const age = Math.max(0, currentYear - baujahr);
-    let baujahrFaktor;
-    if (isHaus) {
-      // Haus: Neubau-Bonus +10%, linearer Abschlag 0.4%/Jahr, Minimum 0.60
-      baujahrFaktor = Math.max(0.60, 1.10 - age * 0.004);
-    } else {
-      // Wohnung: kein Neubau-Aufschlag (Renovation nivelliert), Abschlag 0.4%/Jahr, Min 0.65
-      baujahrFaktor = Math.max(0.65, 1.00 - age * 0.004);
-    }
+    const ageDiscount = 1 - (age * 0.004);
 
-    // ── Schritt 4: Bereinigter m²-Preis
-    let adjustedPrice;
-    if (isHaus) {
-      adjustedPrice = hAvg * baujahrFaktor;
-    } else {
-      adjustedPrice = wAvg * zimmerFaktor * baujahrFaktor;
-    }
+    const adjustedPricePerSqMeter = pricePerSqMeter * ageDiscount;
 
-    // ── Schritt 5: Basiswert Wohnfläche + Nebennutzflächen
-    let estimated = wohnflaeche * adjustedPrice;
-    estimated += terrasse * adjustedPrice * 0.30;  // Terrasse: 30% des m²-Preises
-    estimated += balkon   * adjustedPrice * 0.25;  // Balkon:   25% des m²-Preises
+    // Nur die Wohnfläche wird verwendet (Zimmer, Terrasse, Balkon, Grundstück werden NICHT in den Preis einberechnet – genau wie gewünscht aus dem alten Tool)
+    let estimatedPrice = adjustedPricePerSqMeter * wohnflaeche;
 
-    // ── Schritt 6: Grundstück (nur Häuser)
-    // Baulandpreis skaliert mit dem Wohnungs-m²-Preis der Lage
-    if (isHaus && grundstueck > 0) {
-      let landFaktor;
-      if      (wAvg < 5000)  landFaktor = 0.04;
-      else if (wAvg < 7000)  landFaktor = 0.06;
-      else if (wAvg < 10000) landFaktor = 0.10;
-      else if (wAvg < 14000) landFaktor = 0.18;
-      else                   landFaktor = 0.27;
-      estimated += grundstueck * wAvg * landFaktor;
-    }
+    // Bandbreite exakt wie im alten Tool
+    const wertMin = Math.round(estimatedPrice / 100) * 100;
+    const wertAvg = Math.round(estimatedPrice * 1.08 / 100) * 100;
+    const wertMax = Math.round(estimatedPrice * 1.24 / 100) * 100;
 
-    // ── Schritt 7: Min / Avg / Max (gerundet auf 1000er)
-    // Kalibrierte Bandbreite: Min = Basis, Avg = +3%, Max = +12%
-    const wertMin = Math.round(estimated        / 1000) * 1000;
-    const wertAvg = Math.round(estimated * 1.03 / 1000) * 1000;
-    const wertMax = Math.round(estimated * 1.12 / 1000) * 1000;
-
-    // =============================================
-    // Zapier senden
-    // =============================================
+    // Zapier-Payload (alle Felder werden weiterhin gesendet, nur die Preisberechnung wurde geändert)
     const payload = {
       anrede: document.getElementById('anrede').value,
       vorname: vn,
@@ -712,9 +672,9 @@ Papa.parse(csvUrl, {
       immobilientyp: isHaus ? 'Haus' : 'Wohnung',
       zimmer: document.getElementById('s5_zimmer').value,
       wohnflaeche: wohnflaeche,
-      terrasse: terrasse,
-      balkon: balkon,
-      grundstueck: grundstueck,
+      terrasse: document.getElementById('cb_terrasse').checked ? parseFloat(document.getElementById('s7_terrasse').value) || 0 : 0,
+      balkon: document.getElementById('cb_balkon').checked ? parseFloat(document.getElementById('s7_balkon').value) || 0 : 0,
+      grundstueck: document.getElementById('cb_grundstueck').checked ? parseFloat(document.getElementById('s7_grundstueck').value) || 0 : 0,
       baujahr: baujahr,
       wert_min: wertMin,
       wert_durchschnitt: wertAvg,
@@ -728,8 +688,7 @@ Papa.parse(csvUrl, {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     })
-    .then(response => {
-      console.log('Zapier gesendet:', response);
+    .then(() => {
       vw_go('s10');
       vw_startCd();
     })
@@ -758,7 +717,7 @@ Papa.parse(csvUrl, {
   window.vw_reset = function(){
     if(cdTimer) clearTimeout(cdTimer);
     if(cdInterval) clearInterval(cdInterval);
-    selectedType = 'Wohnung'; // ← FIX: Typ beim Reset zurücksetzen
+    selectedType = 'Wohnung';
     ['s3_strasse','s3_hausnummer','s3_plz','s3_ort','s6_flaeche',
      's7_terrasse','s7_balkon','s7_grundstueck','vorname','nachname','telefon','email']
       .forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
@@ -777,6 +736,5 @@ Papa.parse(csvUrl, {
   };
 })();
 </script>
-
 </body>
 </html>
