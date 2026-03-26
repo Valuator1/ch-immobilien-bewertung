@@ -355,54 +355,28 @@ Papa.parse('https://raw.githubusercontent.com/Valuator1/ch-immobilien-bewertung/
 });
 
 // ── Berechnung ────────────────────────────────────────────────
+// Min  = m2 x CSV_Min
+// Avg  = m2 x CSV_Durchschnitt x 1.10
+// Max  = m2 x CSV_Max x 1.25
 function vw_calculate(){
-  var plz        =document.getElementById('s3_plz').value.trim();
-  var wf         =parseFloat(document.getElementById('s6_flaeche').value)||0;
-  var bj         =parseInt(document.getElementById('baujahrSelect').value)||2000;
-  var zimmer     =parseFloat(document.getElementById('s5_zimmer').value)||3.5;
-  var terrasse   =document.getElementById('cb_terrasse').checked    ?(parseFloat(document.getElementById('s7_terrasse').value)||0):0;
-  var balkon     =document.getElementById('cb_balkon').checked      ?(parseFloat(document.getElementById('s7_balkon').value)||0):0;
-  var grundstueck=document.getElementById('cb_grundstueck').checked ?(parseFloat(document.getElementById('s7_grundstueck').value)||0):0;
-  var isHaus     =selectedType==='Haus';
+  var plz    = document.getElementById('s3_plz').value.trim();
+  var wf     = parseFloat(document.getElementById('s6_flaeche').value)||0;
+  var isHaus = selectedType==='Haus';
 
-  var matches=priceData.filter(function(r){return r.PLZ===plz;});
+  var matches = priceData.filter(function(r){ return r.PLZ===plz; });
   if(!matches.length) return null;
 
-  var sumMin=0,sumAvg=0,n=matches.length;
+  var sumMin=0, sumAvg=0, sumMax=0, n=matches.length;
   matches.forEach(function(r){
-    sumMin+=parseFloat(isHaus?r.Haus_Min:r.Wohnung_Min)||0;
-    sumAvg+=parseFloat(isHaus?r.Haus_Durchschnitt:r.Wohnung_Durchschnitt)||0;
+    sumMin += parseFloat(isHaus ? r.Haus_Min          : r.Wohnung_Min)          || 0;
+    sumAvg += parseFloat(isHaus ? r.Haus_Durchschnitt : r.Wohnung_Durchschnitt) || 0;
+    sumMax += parseFloat(isHaus ? r.Haus_Max          : r.Wohnung_Max)          || 0;
   });
-  var bMin=sumMin/n, bAvg=sumAvg/n;
-  var anchor=isHaus?(bMin*0.70+bAvg*0.30):(bMin*0.62+bAvg*0.38);
 
-  var age=Math.max(0,new Date().getFullYear()-bj), bjF;
-  if     (age<= 5) bjF=1.05;
-  else if(age<=10) bjF=1.00;
-  else if(age<=20) bjF=1.00-(age-10)*0.005;
-  else if(age<=40) bjF=0.95-(age-20)*0.006;
-  else if(age<=60) bjF=0.83-(age-40)*0.005;
-  else if(age<=80) bjF=0.73-(age-60)*0.004;
-  else             bjF=Math.max(0.65,0.65-(age-80)*0.001);
-
-  var zimMap={1:0.93,1.5:0.94,2:0.96,2.5:0.97,3:0.98,3.5:1.00,4:1.02,4.5:1.04,5:1.06,5.5:1.08,6:1.10,6.5:1.12};
-  var zimF =zimMap[zimmer]||1.00;
-  var ausF ={standard:0.95,gehoben:1.15,luxus:1.30}[selectedAusbau]||1.00;
-  var zuF  ={neuwertig:1.05,gepflegt:1.00,renovierungsbedarf:0.88}[selectedZustand]||1.00;
-  var lagF ={keine:0.94,normal:1.00,panorama:1.09}[selectedAussicht]||1.00;
-
-  var bjZuCapped=Math.max(0.76, bjF*zuF);
-  var qualF=bjZuCapped*zimF*ausF*lagF;
-
-  var total=anchor*qualF*wf;
-  total+=(terrasse+balkon)*anchor*qualF*0.25;
-  if(isHaus&&grundstueck>0){ total+=grundstueck*bMin*0.22*Math.max(0.60,bjF); }
-
-  var sp=isHaus?0.18:0.20;
-  return{
-    wertMin:Math.round(total*(1-sp)/1000)*1000,
-    wertAvg:Math.round(total/1000)*1000,
-    wertMax:Math.round(total*(1+sp)/1000)*1000
+  return {
+    wertMin: Math.round((sumMin/n) * wf         / 1000) * 1000,
+    wertAvg: Math.round((sumAvg/n) * wf * 1.10  / 1000) * 1000,
+    wertMax: Math.round((sumMax/n) * wf        / 1000) * 1000
   };
 }
 
@@ -431,17 +405,19 @@ function vw_buildObjektPayload(){
 
 // ── Partial Submit (nach S11, ohne Kontaktdaten) ──────────────
 function vw_submitPartial(){
-  var result=vw_calculate();
-  if(!result) return;
   var payload=vw_buildObjektPayload();
-  payload.submit_typ    = 'partial_ohne_kontakt';
-  payload.wert_min      = result.wertMin;
-  payload.wert_durchschnitt = result.wertAvg;
-  payload.wert_max      = result.wertMax;
-  payload.timestamp     = new Date().toISOString();
-
+  payload.submit_typ = 'partial_ohne_kontakt';
+  payload.timestamp  = new Date().toISOString();
+  var result=vw_calculate();
+  if(result){
+    payload.wert_min          = result.wertMin;
+    payload.wert_durchschnitt = result.wertAvg;
+    payload.wert_max          = result.wertMax;
+  } else {
+    payload.wert_min=0; payload.wert_durchschnitt=0; payload.wert_max=0;
+  }
   fetch(ZAPIER_URL_PARTIAL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
-    .then(function(){ partialSent=true; })
+    .then(function(){ partialSent=true; console.log('Partial OK'); })
     .catch(function(e){ console.error('Partial Zapier:',e); });
 }
 
@@ -576,6 +552,21 @@ window.vw_submitFull=function(){
     vw_go('s1');
   };
 })();
+
+<script>
+// Auto-Resize: teilt dem uebergeordneten iframe die aktuelle Hoehe mit
+function vw_sendHeight(){
+  var h = document.body.scrollHeight || document.documentElement.scrollHeight;
+  window.parent.postMessage({type:'vw-resize', height: h}, '*');
+}
+var _origGo = window.vw_go;
+window.vw_go = function(id){
+  _origGo(id);
+  setTimeout(vw_sendHeight, 50);
+  setTimeout(vw_sendHeight, 300);
+};
+window.addEventListener('load', function(){ setTimeout(vw_sendHeight, 100); });
+window.addEventListener('resize', vw_sendHeight);
 </script>
 </body>
 </html>
