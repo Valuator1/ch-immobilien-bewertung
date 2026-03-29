@@ -346,6 +346,8 @@ var partialSent=false;
 var sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).substr(2,6);
 
 var ZAPIER_URL_FULL    = 'https://hooks.zapier.com/hooks/catch/21668217/up054pl/';
+
+function vw_chf(n){ return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g,"'"); }
 var ZAPIER_URL_PARTIAL = 'https://hooks.zapier.com/hooks/catch/21668217/upj4t6t/';
 
 Papa.parse('https://raw.githubusercontent.com/Valuator1/ch-immobilien-bewertung/main/Alle_PLZ_final.csv',{
@@ -373,10 +375,44 @@ function vw_calculate(){
     sumMax += parseFloat(isHaus ? r.Haus_Max          : r.Wohnung_Max)          || 0;
   });
 
+  var avg = (sumAvg/n) * wf;
+
+  // ── Qualitätsfaktoren ─────────────────────────────────────
+  var faktor = 1.0;
+
+  // Grundstück: mind. 300m² → +10%
+  var grundstueckCb  = document.getElementById('cb_grundstueck');
+  var grundstueckVal = parseFloat(document.getElementById('s7_grundstueck').value) || 0;
+  if (grundstueckCb && grundstueckCb.checked && grundstueckVal >= 300) {
+    faktor += 0.10;
+  }
+
+  // Baujahr: pro Jahr älter als 2026 → -0.4%
+  var baujahr    = parseInt(document.getElementById('baujahrSelect').value) || 2026;
+  var alterJahre = 2026 - baujahr;
+  if (alterJahre > 0) { faktor -= Math.min(alterJahre * 0.004, 0.25); }
+
+  // Ausbaustandard
+  if (selectedAusbau === 'luxus')   faktor += 0.10;
+  if (selectedAusbau === 'gehoben') faktor += 0.05;
+
+  // Zustand
+  if (selectedZustand === 'neuwertig')          faktor += 0.05;
+  if (selectedZustand === 'renovierungsbedarf') faktor -= 0.10;
+
+  // Aussicht / Lage
+  if (selectedAussicht === 'panorama') faktor += 0.15;
+  if (selectedAussicht === 'normal')   faktor += 0.05;
+
+  // Faktor nicht negativ
+  if (faktor < 0) faktor = 0;
+
+  var base = avg * faktor;
+
   return {
-    wertMin: Math.round((sumMin/n) * wf         / 1000) * 1000,
-    wertAvg: Math.round((sumAvg/n) * wf * 1.10  / 1000) * 1000,
-    wertMax: Math.round((sumMax/n) * wf        / 1000) * 1000
+    wertMin: Math.round(base * 0.70 / 1000) * 1000,
+    wertAvg: Math.round(base * 1.10 / 1000) * 1000,
+    wertMax: Math.round(base * 1.40 / 1000) * 1000
   };
 }
 
@@ -410,9 +446,9 @@ function vw_submitPartial(){
   payload.timestamp  = new Date().toISOString();
   var result=vw_calculate();
   if(result){
-    payload.wert_min          = result.wertMin;
-    payload.wert_durchschnitt = result.wertAvg;
-    payload.wert_max          = result.wertMax;
+    payload.wert_min          = vw_chf(result.wertMin);
+    payload.wert_durchschnitt = vw_chf(result.wertAvg);
+    payload.wert_max          = vw_chf(result.wertMax);
   } else {
     payload.wert_min=0; payload.wert_durchschnitt=0; payload.wert_max=0;
   }
@@ -450,9 +486,9 @@ window.vw_submitFull=function(){
   payload.nachname           = nn;
   payload.telefon            = tel;
   payload.email              = em;
-  payload.wert_min           = result.wertMin;
-  payload.wert_durchschnitt  = result.wertAvg;
-  payload.wert_max           = result.wertMax;
+  payload.wert_min           = vw_chf(result.wertMin);
+  payload.wert_durchschnitt  = vw_chf(result.wertAvg);
+  payload.wert_max           = vw_chf(result.wertMax);
   payload.timestamp          = new Date().toISOString();
 
   fetch(ZAPIER_URL_FULL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
